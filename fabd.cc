@@ -154,6 +154,9 @@ void lex() {
 			tok = k_quote;
 			return;
 		}
+		case '\\':
+			src = strchr(src, '\n');
+			continue;
 		case 0:
 			tok = 0;
 			return;
@@ -164,8 +167,6 @@ void lex() {
 }
 
 void initLex() {
-	commentFirst = 0;
-	commentLast = 0;
 	src = text.data();
 	lex();
 }
@@ -197,12 +198,11 @@ void expect(char k) {
 
 struct Table {
 	const char* first;
-	const char* last;
 	string name;
 	vector<pair<const char*, string>> refs;
 	vector<Table*> links;
 
-	Table(string name): name(name) {
+	Table(const char* first, string name): first(first), name(name) {
 	}
 };
 
@@ -210,15 +210,6 @@ vector<Table*> tables;
 
 void parse() {
 	while (tok) {
-		// record any comment block before CREATE
-		// because, though unlikely, it is possible there could be another one between words
-		auto commentFirst = ::commentFirst;
-		auto commentLast = ::commentLast;
-
-		// and the location of the CREATE keyword
-		auto createFirst = ::first;
-
-		// if there is one
 		if (!(eat("create") && eat("table"))) {
 			lex();
 			continue;
@@ -226,12 +217,8 @@ void parse() {
 
 		if (tok != k_word)
 			err("expected name");
-		auto table = new Table({first, src});
+		auto table = new Table(first, {first, src});
 		lex();
-
-		// if there was a comment block immediately before this table
-		// consider it part of the table text
-		table->first = commentLast == createFirst ? commentFirst : createFirst;
 
 		expect('(');
 		size_t depth = 1;
@@ -244,8 +231,7 @@ void parse() {
 				--depth;
 				break;
 			case 0:
-				src = createFirst;
-				err("unclosed CREATE TABLE");
+				err(table->first, "unclosed CREATE TABLE");
 			case k_word:
 				if (eat("references")) {
 					if (tok != k_word)
@@ -256,7 +242,6 @@ void parse() {
 			}
 			lex();
 		}
-		table->last = src;
 		expect(';');
 
 		tables.push_back(table);
@@ -330,6 +315,7 @@ int main(int argc, char** argv) {
 			text = {istreambuf_iterator<char>(is), istreambuf_iterator<char>()};
 		} else {
 			file = "stdin";
+			text = {istreambuf_iterator<char>(cin), istreambuf_iterator<char>()};
 		}
 
 		// make sure input ends with a newline, to simplify parser code
@@ -346,6 +332,7 @@ int main(int argc, char** argv) {
 		sort(sorted.begin(), sorted.end(), [](const Table* a, const Table* b) { return a->name < b->name; });
 		topologicalSort(sorted);
 
+		string o;
 		cout << o;
 		return 0;
 	} catch (exception& e) {
