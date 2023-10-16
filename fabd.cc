@@ -246,6 +246,7 @@ struct Field {
 
 	// SORT
 	bool key = 0;
+	bool nonull = 0;
 	bool serial = 0;
 	//
 
@@ -256,15 +257,30 @@ struct Field {
 Field* parseField() {
 	auto field = new Field(id());
 	field->type = word();
-	if (eat("generated")) {
-		expect("always");
-		expect("as");
-		expect("identity");
-		field->serial = 1;
-	}
-	if (eat("primary")) {
-		expect("key");
-		field->key = 1;
+	for (;;) {
+		// SORT
+		if (eat("generated")) {
+			expect("always");
+			expect("as");
+			expect("identity");
+			field->serial = 1;
+			continue;
+		}
+
+		if (eat("not")) {
+			expect("null");
+			field->nonull = 1;
+			continue;
+		}
+
+		if (eat("primary")) {
+			expect("key");
+			field->key = 1;
+			continue;
+		}
+
+		//
+		break;
 	}
 	return field;
 }
@@ -299,8 +315,9 @@ void parse() {
 				semi();
 				continue;
 			}
-			auto table = new Table(id());
 
+			expect("table");
+			auto table = new Table(id());
 			expect('(');
 			do
 				table->fields.push_back(parseField());
