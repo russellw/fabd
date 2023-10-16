@@ -71,6 +71,24 @@ void lex() {
 		case '\t':
 			++src;
 			continue;
+		case '"':
+		case '\'': {
+			auto q = *src;
+			auto s = src + 1;
+			while (*s != q) {
+				switch (*s) {
+				case '\\':
+					s += 2;
+					continue;
+				case '\n':
+					err("unclosed quote");
+				}
+				++s;
+			}
+			src = s + 1;
+			tok = k_quote;
+			return;
+		}
 		case '-':
 			if (src[1] == '-') {
 				src = strchr(src, '\n');
@@ -138,16 +156,11 @@ void lex() {
 			tok = k_word;
 			return;
 		}
-		case '\'': {
+		case '[': {
 			auto s = src + 1;
-			while (*s != '\'') {
-				switch (*s) {
-				case '\\':
-					s += 2;
-					continue;
-				case '\n':
-					err("unclosed quote");
-				}
+			while (*s != ']') {
+				if (*s == '\n')
+					err("unclosed '['");
 				++s;
 			}
 			src = s + 1;
@@ -182,11 +195,13 @@ bool eat(int k) {
 bool eat(const char* t) {
 	if (tok != k_word)
 		return 0;
+	auto s = first;
 	auto n = strlen(t);
-	if (src - first != n)
+	if (src - s != n)
 		return 0;
-	if (_memicmp(first, t, n))
-		return 0;
+	for (size_t i = 0; i != n; ++i)
+		if (tolower((unsigned char)s[i]) != t[i])
+			return 0;
 	lex();
 	return 1;
 }
