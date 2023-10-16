@@ -240,13 +240,20 @@ string id() {
 	return s;
 }
 
+struct Table;
+
 struct Field {
 	string name;
 	string type;
 
 	// SORT
 	bool key = 0;
+	Field* linkField = 0;
+	Table* linkTable = 0;
 	bool nonull = 0;
+	string refField;
+	const char* refFirst = 0;
+	string refTable;
 	bool serial = 0;
 	//
 
@@ -279,6 +286,15 @@ Field* parseField() {
 			continue;
 		}
 
+		if (eat("references")) {
+			field->refFirst = first;
+			field->refTable = id();
+			expect('(');
+			field->refField = id();
+			expect(')');
+			continue;
+		}
+
 		//
 		break;
 	}
@@ -287,10 +303,8 @@ Field* parseField() {
 
 struct Table {
 	string name;
-
 	vector<Field*> fields;
-
-	vector<pair<const char*, string>> refs;
+	unordered_map<string, Field*> fieldsMap;
 	vector<Table*> links;
 
 	Table(string name): name(name) {
@@ -332,19 +346,28 @@ void parse() {
 	}
 }
 
-// resolve names to pointers to tables
+// resolve names to pointers
 void link() {
-	unordered_map<string, Table*> m;
-	for (auto table: tables)
-		m[table->name] = table;
+	unordered_map<string, Table*> tablesMap;
+	for (auto table: tables) {
+		tablesMap[table->name] = table;
+		for (auto field: table->fields)
+			table->fieldsMap[field->name] = field;
+	}
 
 	for (auto table: tables)
-		for (auto& r: table->refs) {
-			auto t = m[r.second];
-			if (!t)
-				err(r.first, r.second + ": not found");
-			table->links.push_back(t);
-		}
+		for (auto field: table->fields)
+			if (field->refTable.size()) {
+				auto t = tablesMap[field->refTable];
+				if (!t)
+					err(field->refFirst, field->refTable + ": not found");
+				field->linkTable = t;
+				table->links.push_back(t);
+
+				auto f = t->fieldsMap[field->refField];
+				if (!f)
+					err(field->refFirst, field->refField + ": not found");
+			}
 }
 
 template <class T> void topologicalSortRecur(const vector<T>& v, vector<T>& o, unordered_set<T>& visited, T a) {
