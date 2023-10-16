@@ -211,68 +211,115 @@ void expect(char k) {
 		err(string("expected '") + k + '\'');
 }
 
-struct Table {
-	const char* first;
+void expect(const char* t) {
+	if (!eat(t))
+		err(string("expected '") + t + '\'');
+}
+
+string word() {
+	if (tok != k_word)
+		err("expected word");
+	string s(first, src);
+	lex();
+	return s;
+}
+
+string id() {
+	string s;
+	switch (tok) {
+	case k_quote:
+		s.assign(first + 1, src - 1);
+		break;
+	case k_word:
+		s.assign(first, src);
+		break;
+	default:
+		err("expected identifier");
+	}
+	lex();
+	return s;
+}
+
+struct Field {
 	string name;
+	string type;
+
+	// SORT
+	bool key = 0;
+	bool serial = 0;
+	//
+
+	Field(string name): name(name) {
+	}
+};
+
+Field* parseField() {
+	auto field = new Field(id());
+	field->type = word();
+	if (eat("generated")) {
+		expect("always");
+		expect("as");
+		expect("identity");
+		field->serial = 1;
+	}
+	if (eat("primary")) {
+		expect("key");
+		field->key = 1;
+	}
+	return field;
+}
+
+struct Table {
+	string name;
+
+	vector<Field*> fields;
+
 	vector<pair<const char*, string>> refs;
 	vector<Table*> links;
 
-	Table(const char* first, string name): first(first), name(name) {
+	Table(string name): name(name) {
 	}
 };
 
 vector<Table*> tables;
 
+void semi() {
+	auto s = first;
+	while (!eat(';')) {
+		if (!tok)
+			err(s, "unfinished statement");
+		lex();
+	}
+}
+
 void parse() {
 	while (tok) {
-		if (!(eat("create") && eat("table"))) {
-			lex();
+		if (eat("create")) {
+			if (eat("database")) {
+				semi();
+				continue;
+			}
+			auto table = new Table(id());
+
+			expect('(');
+			do
+				table->fields.push_back(parseField());
+			while (eat(','));
+			expect(')');
+			expect(';');
+
+			tables.push_back(table);
 			continue;
 		}
-
-		if (tok != k_word)
-			err("expected name");
-		auto table = new Table(first, {first, src});
-		lex();
-
-		expect('(');
-		size_t depth = 1;
-		while (depth) {
-			switch (tok) {
-			case '(':
-				++depth;
-				break;
-			case ')':
-				--depth;
-				break;
-			case 0:
-				err(table->first, "unclosed CREATE TABLE");
-			case k_word:
-				if (eat("references")) {
-					if (tok != k_word)
-						err("expected name");
-					table->refs.emplace_back(first, string(first, src));
-				}
-				break;
-			}
-			lex();
-		}
-		expect(';');
-
-		tables.push_back(table);
-		continue;
+		err("expected CREATE");
 	}
 }
 
 // resolve names to pointers to tables
 void link() {
 	unordered_map<string, Table*> m;
-	for (auto table: tables) {
-		auto& t = m[table->name];
-		if (t)
-			err(table->first, table->name + ": duplicate name");
-		t = table;
-	}
+	for (auto table: tables)
+		m[table->name] = table;
 
 	for (auto table: tables)
 		for (auto& r: table->refs) {
