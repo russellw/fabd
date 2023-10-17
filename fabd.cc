@@ -228,8 +228,6 @@ string id() {
 	string s;
 	switch (tok) {
 	case k_quote:
-		s.assign(first + 1, src - 1);
-		break;
 	case k_word:
 		s.assign(first, src);
 		break;
@@ -418,6 +416,7 @@ int main(int argc, char** argv) {
 			file = s;
 		}
 
+		// default to reading schema from stdin
 		if (file.size()) {
 			ifstream is(file, ios::binary);
 			text = {istreambuf_iterator<char>(is), istreambuf_iterator<char>()};
@@ -430,18 +429,45 @@ int main(int argc, char** argv) {
 		if (text.empty() || text.back() != '\n')
 			text += '\n';
 
+		// parse the schema
 		initLex();
 		parse();
 		if (tables.empty())
 			throw runtime_error(file + ": no tables found");
 		link();
 
+		// topological sort to insert dependencies first
 		auto sorted = tables;
 		sort(sorted.begin(), sorted.end(), [](const Table* a, const Table* b) { return a->name < b->name; });
 		topologicalSort(sorted);
 
-		string o;
-		cout << o;
+		// detail tables should have more records
+		unordered_map<const Table*, size_t> tableSize;
+		for (auto table: tables) {
+			if (table->name == "country")
+				continue;
+			size_t n = 1;
+			for (auto field: table->fields)
+				if (field->linkTable)
+					n = max(n, tableSize[field->linkTable]);
+			n *= 10;
+			tableSize[table] = n;
+		}
+
+		cout << "BEGIN;\n";
+
+		// make sure to avoid polluting a database that already contains data
+		cout << "DO $$\n";
+		cout << "BEGIN\n";
+		for (auto table: tables) {
+			if (table->name == "country")
+				continue;
+			cout << "IF EXISTS (SELECT 1 FROM " << table->name
+				 << ") THEN RAISE EXCEPTION 'Database already contains data'; END IF;\n";
+		}
+		cout << "END $$;\n";
+
+		cout << "COMMIT;\n";
 		return 0;
 	} catch (exception& e) {
 		cerr << e.what() << '\n';
