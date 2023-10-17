@@ -263,10 +263,8 @@ struct Field {
 	// SORT
 	bool autoinc = 0;
 	bool key = 0;
-	Field* linkField = 0;
 	Table* linkTable = 0;
 	bool nonull = 0;
-	string refField;
 	char* refFirst = 0;
 	string refTable;
 	//
@@ -308,7 +306,7 @@ Field* parseField() {
 			field->refFirst = first;
 			field->refTable = id();
 			expect('(');
-			field->refField = id();
+			id();
 			expect(')');
 			continue;
 		}
@@ -368,11 +366,8 @@ void parse() {
 // resolve names to pointers
 void link() {
 	unordered_map<string, Table*> tablesMap;
-	for (auto table: tables) {
+	for (auto table: tables)
 		tablesMap[table->name] = table;
-		for (auto field: table->fields)
-			table->fieldsMap[field->name] = field;
-	}
 
 	for (auto table: tables)
 		for (auto field: table->fields)
@@ -382,10 +377,6 @@ void link() {
 					err(field->refFirst, field->refTable + ": not found");
 				field->linkTable = t;
 				table->links.push_back(t);
-
-				auto f = t->fieldsMap[field->refField];
-				if (!f)
-					err(field->refFirst, field->refField + ": not found");
 			}
 }
 
@@ -559,8 +550,13 @@ int main(int argc, char** argv) {
 						continue;
 					if (separator())
 						cout << ',';
-					cout << makeVal(table, i + 1, field);
+					auto a = makeVal(table, i, field);
+					if (field->key)
+						table->data.push_back(a);
+					cout << a;
 				}
+				if (table->data.empty())
+					table->data.push_back(to_string(i));
 				cout << ");\n";
 			}
 		}
