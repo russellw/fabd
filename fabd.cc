@@ -42,8 +42,8 @@ enum {
 };
 
 // SORT
-const char* first;
-const char* src;
+char* first;
+char* src;
 int tok;
 //
 
@@ -55,7 +55,7 @@ int tok;
 	throw runtime_error(file + ':' + to_string(line) + ": " + msg);
 }
 
-[[noreturn]] void err(const char* s, string msg) {
+[[noreturn]] void err(char* s, string msg) {
 	src = s;
 	err(msg);
 }
@@ -252,7 +252,7 @@ struct Field {
 	Table* linkTable = 0;
 	bool nonull = 0;
 	string refField;
-	const char* refFirst = 0;
+	char* refFirst = 0;
 	string refTable;
 	bool serial = 0;
 	//
@@ -261,8 +261,14 @@ struct Field {
 	}
 };
 
+void lower() {
+	for (auto s = first; s != src; ++s)
+		*s = tolower((unsigned char)*s);
+}
+
 Field* parseField() {
 	auto field = new Field(id());
+	lower();
 	field->type = word();
 	for (;;) {
 		// SORT
