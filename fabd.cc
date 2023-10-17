@@ -263,10 +263,10 @@ struct Field {
 	// SORT
 	bool autoinc = 0;
 	bool key = 0;
-	Table* linkTable = 0;
+	Table* link = 0;
 	bool nonull = 0;
+	string ref;
 	char* refFirst = 0;
-	string refTable;
 	//
 
 	Field(char* first, string name): first(first), name(name) {
@@ -304,7 +304,7 @@ Field* parseField() {
 		}
 		if (eat("references")) {
 			field->refFirst = first;
-			field->refTable = id();
+			field->ref = id();
 			expect('(');
 			id();
 			expect(')');
@@ -371,11 +371,11 @@ void link() {
 
 	for (auto table: tables)
 		for (auto field: table->fields)
-			if (field->refTable.size()) {
-				auto t = tablesMap[field->refTable];
+			if (field->ref.size()) {
+				auto t = tablesMap[field->ref];
 				if (!t)
-					err(field->refFirst, field->refTable + ": not found");
-				field->linkTable = t;
+					err(field->refFirst, field->ref + ": not found");
+				field->link = t;
 				table->links.push_back(t);
 			}
 }
@@ -424,8 +424,8 @@ string makeVal(const Table* table, size_t i, const Field* field) {
 		s += to_string(i);
 		return '\'' + s + '\'';
 	}
-	if (field->linkTable)
-		return '\'' + rnd(field->linkTable->data) + '\'';
+	if (field->link)
+		return '\'' + rnd(field->link->data) + '\'';
 
 	// SORT
 	if (field->type == "bigint" || field->type == "integer" || field->type == "smallint") {
@@ -509,8 +509,8 @@ int main(int argc, char** argv) {
 				continue;
 			size_t n = 1;
 			for (auto field: table->fields)
-				if (field->linkTable)
-					n = max(n, tableSize[field->linkTable]);
+				if (field->link)
+					n = max(n, tableSize[field->link]);
 			n *= 10;
 			tableSize[table] = n;
 		}
