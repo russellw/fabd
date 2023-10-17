@@ -441,8 +441,9 @@ string makeVal(const Table* table, size_t i, const Field* field) {
 		return '\'' + rnd(field->linkTable->data) + '\'';
 
 	// SORT
-		return '\'' + table->name + ' ' + field->name + '\'';
-	if (field->type == "bigint" || field->type == "integer" || field->type == "smallint")
+	if (field->type == "bigint" || field->type == "integer" || field->type == "smallint") {
+		return to_string(rnd(1000));
+	}
 	if (field->type == "date") {
 		auto date = sys_days(2023y / 1 / 1) + days(rnd(365));
 		year_month_day ymd(date);
@@ -456,8 +457,9 @@ string makeVal(const Table* table, size_t i, const Field* field) {
 			s += '0' + (char)rnd(10);
 		return s;
 	}
-	if (field->type == "text")
-		return to_string(rnd(1000));
+	if (field->type == "text") {
+		return '\'' + table->name + ' ' + field->name + '\'';
+	}
 	//
 	err(field->first, field->type + ": unknown type");
 }
@@ -540,8 +542,30 @@ int main(int argc, char** argv) {
 
 		for (auto table: tables) {
 			auto n = tableSize[table];
-			for (size_t i = 0; i != n; ++i) {
+			for (size_t i = 1; i <= n; ++i) {
+				cout << "INSERT INTO " << table->name << '(';
+
 				Separator separator;
+				for (auto field: table->fields) {
+					if (field->autoinc)
+						continue;
+					if (separator())
+						cout << ',';
+					cout << field->name;
+				}
+				cout << ") VALUES (";
+
+				// it's okay to not use parameters here because we control the data
+				// user-supplied data always needs parameters
+				separator.subsequent = 0;
+				for (auto field: table->fields) {
+					if (field->autoinc)
+						continue;
+					if (separator())
+						cout << ',';
+					cout << makeVal(table, i + 1, field);
+				}
+				cout << ");\n";
 			}
 		}
 
