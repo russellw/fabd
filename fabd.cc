@@ -294,19 +294,16 @@ Field* parseField() {
 			field->autoinc = 1;
 			continue;
 		}
-
 		if (eat("not")) {
 			expect("null");
 			field->nonull = 1;
 			continue;
 		}
-
 		if (eat("primary")) {
 			expect("key");
 			field->key = 1;
 			continue;
 		}
-
 		if (eat("references")) {
 			field->refFirst = first;
 			field->refTable = id();
@@ -315,7 +312,6 @@ Field* parseField() {
 			expect(')');
 			continue;
 		}
-
 		//
 		break;
 	}
