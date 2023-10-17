@@ -9,11 +9,13 @@
 #include <string.h>
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <ostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -21,6 +23,9 @@
 #include <utility>
 #include <vector>
 using namespace std;
+
+using namespace chrono;
+using namespace literals;
 
 #ifdef NDEBUG
 #define debug(a)
@@ -30,10 +35,6 @@ using namespace std;
 
 string file;
 string text;
-
-bool isid(unsigned char c) {
-	return isalnum(c) || c == '_';
-}
 
 // tokenizer
 enum {
@@ -46,6 +47,10 @@ char* first;
 char* src;
 int tok;
 //
+
+bool isid(unsigned char c) {
+	return isalnum(c) || c == '_';
+}
 
 [[noreturn]] void err(string msg) {
 	size_t line = 1;
@@ -95,6 +100,16 @@ void lex() {
 				continue;
 			}
 			break;
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
 		case 'A':
 		case 'B':
 		case 'C':
@@ -241,10 +256,12 @@ string id() {
 struct Table;
 
 struct Field {
+	char* first;
 	string name;
 	string type;
 
 	// SORT
+	bool autoinc = 0;
 	bool key = 0;
 	Field* linkField = 0;
 	Table* linkTable = 0;
@@ -252,10 +269,9 @@ struct Field {
 	string refField;
 	char* refFirst = 0;
 	string refTable;
-	bool serial = 0;
 	//
 
-	Field(string name): name(name) {
+	Field(char* first, string name): first(first), name(name) {
 	}
 };
 
@@ -265,7 +281,8 @@ void lower() {
 }
 
 Field* parseField() {
-	auto field = new Field(id());
+	auto s = first;
+	auto field = new Field(s, id());
 	lower();
 	field->type = word();
 	for (;;) {
@@ -274,7 +291,7 @@ Field* parseField() {
 			expect("always");
 			expect("as");
 			expect("identity");
-			field->serial = 1;
+			field->autoinc = 1;
 			continue;
 		}
 
@@ -310,6 +327,8 @@ struct Table {
 	vector<Field*> fields;
 	unordered_map<string, Field*> fieldsMap;
 	vector<Table*> links;
+
+	vector<string> data;
 
 	Table(string name): name(name) {
 	}
@@ -390,6 +409,59 @@ template <class T> void topologicalSort(vector<T>& v) {
 	v = o;
 }
 
+struct Separator {
+	bool subsequent = 0;
+
+	bool operator()() {
+		auto a = subsequent;
+		subsequent = 1;
+		return a;
+	}
+};
+
+default_random_engine rndEngine;
+
+size_t rnd(size_t n) {
+	uniform_int_distribution<size_t> d(0, n - 1);
+	return d(rndEngine);
+}
+
+template <class T> const T& rnd(const vector<T>& v) {
+	return v[rnd(v.size())];
+}
+
+string makeVal(const Table* table, size_t i, const Field* field) {
+	assert(!field->autoinc);
+	if (field->key) {
+		string s(1, toupper((unsigned char)table->name[0]));
+		s += to_string(i);
+		return '\'' + s + '\'';
+	}
+	if (field->linkTable)
+		return '\'' + rnd(field->linkTable->data) + '\'';
+
+	// SORT
+		return '\'' + table->name + ' ' + field->name + '\'';
+	if (field->type == "bigint" || field->type == "integer" || field->type == "smallint")
+	if (field->type == "date") {
+		auto date = sys_days(2023y / 1 / 1) + days(rnd(365));
+		year_month_day ymd(date);
+		char s[13];
+		sprintf_s(s, sizeof s, "'%04d-%02d-%02d'", (int)ymd.year(), (unsigned)ymd.month(), (unsigned)ymd.day());
+		return s;
+	}
+	if (field->type == "decimal") {
+		auto s = to_string(rnd(10)) + '.';
+		for (size_t i = 2; i--;)
+			s += '0' + (char)rnd(10);
+		return s;
+	}
+	if (field->type == "text")
+		return to_string(rnd(1000));
+	//
+	err(field->first, field->type + ": unknown type");
+}
+
 int main(int argc, char** argv) {
 	try {
 		for (int i = 1; i < argc; ++i) {
@@ -454,18 +526,24 @@ int main(int argc, char** argv) {
 			tableSize[table] = n;
 		}
 
+		cout << "\\set ON_ERROR_STOP true\n";
 		cout << "BEGIN;\n";
 
 		// make sure to avoid polluting a database that already contains data
 		cout << "DO $$\n";
 		cout << "BEGIN\n";
-		for (auto table: tables) {
-			if (table->name == "country")
-				continue;
-			cout << "IF EXISTS (SELECT 1 FROM " << table->name
-				 << ") THEN RAISE EXCEPTION 'Database already contains data'; END IF;\n";
-		}
+		for (auto table: tables)
+			if (tableSize[table])
+				cout << "IF EXISTS (SELECT 1 FROM " << table->name
+					 << ") THEN RAISE EXCEPTION 'Database already contains data'; END IF;\n";
 		cout << "END $$;\n";
+
+		for (auto table: tables) {
+			auto n = tableSize[table];
+			for (size_t i = 0; i != n; ++i) {
+				Separator separator;
+			}
+		}
 
 		cout << "COMMIT;\n";
 		return 0;
